@@ -269,3 +269,117 @@ html, body, #root {
 .messages::-webkit-scrollbar { width: 5px; }
 .messages::-webkit-scrollbar-track { background: transparent; }
 .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ── Feature pills (upload screen) ──────────────────────────────────────── */
+.feature-pills {
+  display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+  margin-top: 8px;
+}
+.pill {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 999px; padding: 5px 14px;
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+}
+
+/* ── Tool tabs ───────────────────────────────────────────────────────────── */
+.tool-tabs {
+  display: flex; gap: 2px; padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface); flex-shrink: 0;
+}
+.tool-tab {
+  background: none; border: none; cursor: pointer;
+  padding: 6px 14px; border-radius: 6px;
+  font-family: var(--mono); font-size: 12px; color: var(--muted);
+  transition: all .18s;
+}
+.tool-tab:hover { color: var(--text); background: var(--surface2); }
+.tool-tab.active { color: var(--accent); background: rgba(0,229,160,.08); }
+
+/* ── Tool panels (summary, compare, contradictions) ──────────────────────── */
+.tool-panel {
+  flex: 1; overflow-y: auto; padding: 24px;
+  display: flex; flex-direction: column; gap: 20px;
+}
+.tool-panel-header {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+}
+.tool-panel-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+.tool-panel-sub { font-size: 13px; color: var(--muted); max-width: 500px; }
+
+.run-btn {
+  flex-shrink: 0;
+  background: var(--accent); color: #050810; border: none;
+  padding: 8px 18px; border-radius: 8px;
+  font-family: var(--mono); font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: all .18s;
+  display: flex; align-items: center; gap: 8px;
+}
+.run-btn:hover:not(:disabled) { background: #00ffb3; }
+.run-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.spinner-sm {
+  width: 10px; height: 10px;
+  border: 2px solid rgba(5,8,16,.3);
+  border-top-color: #050810;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  display: inline-block;
+}
+
+.tool-result {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 20px 24px;
+  line-height: 1.8; font-size: 14px;
+}
+.tool-result p { margin-bottom: 0.6em; }
+.tool-result p:last-child { margin-bottom: 0; }
+.tool-result strong { font-weight: 600; }
+.tool-result ul, .tool-result ol { padding-left: 1.4em; margin: 0.4em 0; }
+.tool-result li { margin-bottom: 0.3em; }
+.tool-result h1, .tool-result h2, .tool-result h3 { font-weight: 600; margin: 0.8em 0 0.4em; }
+.tool-result blockquote { border-left: 3px solid var(--accent); padding-left: 12px; color: var(--muted); margin: 0.5em 0; }
+.tool-result code { font-family: var(--mono); font-size: 12px; background: var(--surface2); padding: 1px 5px; border-radius: 4px; }
+
+.tool-empty {
+  color: var(--muted); font-family: var(--mono); font-size: 13px;
+  text-align: center; padding: 48px;
+}
+
+/* ── Compare layout ──────────────────────────────────────────────────────── */
+.compare-docs {
+  display: flex; align-items: center; gap: 16px;
+}
+.compare-doc {
+  flex: 1; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 16px 20px;
+}
+.compare-doc-label {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 6px;
+}
+.compare-doc-name {
+  font-family: var(--mono); font-size: 13px; color: var(--text);
+  display: flex; align-items: center; gap: 6px;
+}
+.compare-vs {
+  font-family: var(--mono); font-size: 13px; color: var(--muted);
+  flex-shrink: 0;
+}
+.compare-upload-btn {
+  display: inline-block; cursor: pointer;
+  border: 1px dashed var(--border); border-radius: 6px;
+  padding: 6px 14px; font-family: var(--mono); font-size: 12px; color: var(--muted);
+  transition: all .18s;
+}
+.compare-upload-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Voice button ────────────────────────────────────────────────────────── */
+.voice-btn {
+  background: none; border: 1px solid var(--border); border-radius: 8px;
+  width: 44px; height: 44px; font-size: 16px; cursor: pointer;
+  flex-shrink: 0; transition: all .18s; display: flex; align-items: center; justify-content: center;
+}
+.voice-btn:hover { border-color: var(--accent); }
+.voice-btn.active { border-color: var(--accent); background: rgba(0,229,160,.1); animation: pulse 1s ease infinite; }
+@keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(0,229,160,.4); } 50% { box-shadow: 0 0 0 6px rgba(0,229,160,0); } }

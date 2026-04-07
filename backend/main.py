@@ -87,6 +87,28 @@ def cosine_top_k(query_emb: np.ndarray, doc_embs: np.ndarray, k: int) -> list[in
     return list(np.argsort(scores)[::-1][:k])
 
 
+def stream_prompt(prompt: str):
+    """Generator that yields SSE chunks from a Gemini streaming call."""
+    for chunk in gemini_client.models.generate_content_stream(model=GEMINI_MODEL, contents=prompt):
+        if chunk.text:
+            yield f"data: {json.dumps({'type': 'chunk', 'text': chunk.text})}\n\n"
+    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+
+# ── Request models ────────────────────────────────────────────────────────────
+
+class SessionRequest(BaseModel):
+    session_id: str
+
+class AskRequest(BaseModel):
+    session_id: str
+    question: str
+
+class CompareRequest(BaseModel):
+    session_id_a: str
+    session_id_b: str
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.get("/health")
@@ -129,18 +151,12 @@ async def upload(file: UploadFile = File(...)):
     }
 
 
-class AskRequest(BaseModel):
-    session_id: str
-    question: str
-
-
 @app.post("/ask")
 async def ask(req: AskRequest):
     """Stream the answer token-by-token using Server-Sent Events."""
     session = sessions.get(req.session_id)
     if not session:
         raise HTTPException(404, "Session not found. Please upload the PDF again.")
-
     if not req.question.strip():
         raise HTTPException(400, "Question cannot be empty.")
 
@@ -165,10 +181,118 @@ Answer:"""
     def generate():
         # Send source chunks first so the frontend can display them immediately
         yield f"data: {json.dumps({'type': 'sources', 'sources': context_chunks})}\n\n"
-        # Stream answer tokens as they arrive from Gemini
-        for chunk in gemini_client.models.generate_content_stream(model=GEMINI_MODEL, contents=prompt):
-            if chunk.text:
-                yield f"data: {json.dumps({'type': 'chunk', 'text': chunk.text})}\n\n"
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        yield from stream_prompt(prompt)
 
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@app.post("/suggest")
+async def suggest(req: SessionRequest):
+    """Generate 5 relevant questions based on the document content."""
+    session = sessions.get(req.session_id)
+    if not session:
+        raise HTTPException(404, "Session not found.")
+
+    # Sample from the first few chunks to understand the document
+    sample = " ".join(session["chunks"][:5])
+
+    prompt = f"""Based on this document excerpt, generate exactly 5 insightful questions a reader might want to ask.
+Return ONLY a JSON array of strings, no explanation, no markdown fences.
+Example: ["What is...?", "How does...?", "When was...?", "Why did...?", "What are...?"]
+
+Document excerpt:
+{sample}
+
+Questions JSON:"""
+
+    response = gemini_client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+    text = response.text.strip().strip("```json").strip("```").strip()
+    questions = json.loads(text)
+    return {"questions": questions[:5]}
+
+
+@app.post("/summary")
+async def summary(req: SessionRequest):
+    """Generate a structured auto-summary of the document."""
+    session = sessions.get(req.session_id)
+    if not session:
+        raise HTTPException(404, "Session not found.")
+
+    # Use the first 20 chunks (~7000 words) for the summary
+    text = " ".join(session["chunks"][:20])
+
+    prompt = f"""Analyze this document and provide a structured summary with these sections:
+
+**Document type** — what kind of document is this?
+**Purpose** — what is it about? (1-2 sentences)
+**Key entities** — people, organizations, dates, amounts mentioned
+**Main points** — up to 5 bullet points
+**Important dates or deadlines** — if any
+**Conclusions or action items** — if any
+
+Document:
+{text}
+
+Structured summary:"""
+
+    return StreamingResponse(stream_prompt(prompt), media_type="text/event-stream")
+
+
+@app.post("/compare")
+async def compare(req: CompareRequest):
+    """Compare two uploaded documents."""
+    session_a = sessions.get(req.session_id_a)
+    session_b = sessions.get(req.session_id_b)
+    if not session_a:
+        raise HTTPException(404, "First document session not found.")
+    if not session_b:
+        raise HTTPException(404, "Second document session not found.")
+
+    text_a = " ".join(session_a["chunks"][:15])
+    text_b = " ".join(session_b["chunks"][:15])
+
+    prompt = f"""Compare these two documents thoroughly:
+
+**DOCUMENT A** ({session_a["filename"]}):
+{text_a}
+
+**DOCUMENT B** ({session_b["filename"]}):
+{text_b}
+
+Provide a structured comparison covering:
+- **Main topic / purpose** of each document
+- **Key similarities**
+- **Key differences**
+- **Which is more detailed / complete** and why
+- **Any conflicting information** between them
+
+Comparison:"""
+
+    return StreamingResponse(stream_prompt(prompt), media_type="text/event-stream")
+
+
+@app.post("/contradictions")
+async def contradictions(req: SessionRequest):
+    """Detect contradictions, inconsistencies, and ambiguities in the document."""
+    session = sessions.get(req.session_id)
+    if not session:
+        raise HTTPException(404, "Session not found.")
+
+    text = " ".join(session["chunks"][:20])
+
+    prompt = f"""Carefully analyze this document and identify:
+
+- **Contradictions** — statements that directly conflict with each other
+- **Inconsistencies** — data or facts that don't align (dates, numbers, names)
+- **Ambiguities** — unclear or vague statements that could be misinterpreted
+- **Missing information** — important gaps that should be addressed
+
+For each issue found, quote the relevant text and explain the problem.
+If the document appears consistent and clear, state that explicitly.
+
+Document:
+{text}
+
+Analysis:"""
+
+    return StreamingResponse(stream_prompt(prompt), media_type="text/event-stream")
