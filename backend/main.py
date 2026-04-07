@@ -11,6 +11,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from google import genai
+from google.genai import errors as genai_errors
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 
@@ -87,12 +88,24 @@ def cosine_top_k(query_emb: np.ndarray, doc_embs: np.ndarray, k: int) -> list[in
     return list(np.argsort(scores)[::-1][:k])
 
 
+QUOTA_MSG = (
+    "This free service has a usage limit shared across all users. "
+    "Please try again in a few minutes. "
+    "If you need priority access, contact the developer at rafatrik@gmail.com"
+)
+
 def stream_prompt(prompt: str):
     """Generator that yields SSE chunks from a Gemini streaming call."""
-    for chunk in gemini_client.models.generate_content_stream(model=GEMINI_MODEL, contents=prompt):
-        if chunk.text:
-            yield f"data: {json.dumps({'type': 'chunk', 'text': chunk.text})}\n\n"
-    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+    try:
+        for chunk in gemini_client.models.generate_content_stream(model=GEMINI_MODEL, contents=prompt):
+            if chunk.text:
+                yield f"data: {json.dumps({'type': 'chunk', 'text': chunk.text})}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+    except genai_errors.ClientError as e:
+        if e.status_code == 429:
+            yield f"data: {json.dumps({'type': 'error', 'message': QUOTA_MSG})}\n\n"
+        else:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'An error occurred. Please try again.'})}\n\n"
 
 
 # ── Request models ────────────────────────────────────────────────────────────
@@ -205,10 +218,15 @@ Document excerpt:
 
 Questions JSON:"""
 
-    response = gemini_client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
-    text = response.text.strip().strip("```json").strip("```").strip()
-    questions = json.loads(text)
-    return {"questions": questions[:5]}
+    try:
+        response = gemini_client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+        text = response.text.strip().strip("```json").strip("```").strip()
+        questions = json.loads(text)
+        return {"questions": questions[:5]}
+    except genai_errors.ClientError as e:
+        if e.status_code == 429:
+            raise HTTPException(429, QUOTA_MSG)
+        raise HTTPException(500, "Could not generate suggestions.")
 
 
 @app.post("/summary")

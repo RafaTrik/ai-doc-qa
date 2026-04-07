@@ -87,6 +87,7 @@ export default function App() {
         if (!line.startsWith('data: ')) continue
         const event = JSON.parse(line.slice(6))
         if (event.type === 'chunk') setter(prev => prev + event.text)
+        if (event.type === 'error') throw new Error(event.message)
       }
     }
   }
@@ -208,6 +209,8 @@ export default function App() {
             setMessages(prev => prev.map((m, i) =>
               i === prev.length - 1 ? { ...m, sources: event.sources } : m
             ))
+          } else if (event.type === 'error') {
+            throw new Error(event.message)
           }
         }
       }
