@@ -1,5 +1,6 @@
 import os
 import uuid
+from contextlib import asynccontextmanager
 from io import BytesIO
 
 import numpy as np
@@ -13,7 +14,24 @@ from sentence_transformers import SentenceTransformer
 
 load_dotenv()
 
-app = FastAPI(title="AI Doc Q&A")
+# ── Startup: load models after the port is bound ─────────────────────────────
+# Using lifespan so uvicorn binds to the port before the slow model download,
+# avoiding Render's port-scan timeout.
+
+embed_model: SentenceTransformer | None = None
+gemini_client: genai.Client | None = None
+GEMINI_MODEL = "gemini-3-flash-preview"
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global embed_model, gemini_client
+    print("Loading embedding model…")
+    embed_model = SentenceTransformer("all-MiniLM-L6-v2")  # local, runs on CPU
+    print("Embedding model ready.")
+    gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
+    yield
+
+app = FastAPI(title="AI Doc Q&A", lifespan=lifespan)
 
 # Allow all origins so the Vercel frontend can reach this backend
 app.add_middleware(
@@ -22,15 +40,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# ── Models (loaded once at startup) ──────────────────────────────────────────
-
-print("Loading embedding model…")
-embed_model = SentenceTransformer("all-MiniLM-L6-v2")  # local, runs on CPU
-print("Embedding model ready.")
-
-gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
-GEMINI_MODEL = "gemini-3-flash-preview"
 
 # ── In-memory session store ───────────────────────────────────────────────────
 # Each uploaded PDF gets a session_id; data lives in RAM until the server restarts
