@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 
 // In production (Vercel), set VITE_API_URL to the Railway/Render backend URL.
@@ -50,8 +50,26 @@ export default function App() {
   const [contradictions, setContradictions]         = useState('')
   const [contradictionsLoading, setContradictionsLoading] = useState(false)
 
+  const [aiWarning, setAiWarning] = useState<string | null>(null)
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef       = useRef<HTMLTextAreaElement>(null)
+
+  // Poll Gemini availability every 2 minutes; check once on mount
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const res = await fetch(`${API}/health/ai`)
+        if (res.ok) {
+          const data = await res.json()
+          setAiWarning(data.available ? null : data.message)
+        }
+      } catch { /* ignore network errors */ }
+    }
+    check()
+    const id = setInterval(check, 2 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [])
 
   const scrollToBottom = () =>
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
@@ -312,6 +330,9 @@ export default function App() {
 
       {/* Error */}
       {error && <div className="error-toast">{error}</div>}
+
+      {/* AI availability warning */}
+      {aiWarning && <div className="ai-warning-toast">⚠️ {aiWarning}</div>}
 
       {/* Upload screen */}
       {!doc && (

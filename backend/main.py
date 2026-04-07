@@ -129,6 +129,21 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/health/ai")
+def health_ai():
+    """Check Gemini availability with a minimal test call."""
+    try:
+        gemini_client.models.generate_content(model=GEMINI_MODEL, contents=".")
+        return {"available": True}
+    except genai_errors.ClientError as e:
+        if e.status_code == 429:
+            return {
+                "available": False,
+                "message": "The service has reached its usage limit shared across all users. Please try again in a few minutes.",
+            }
+        return {"available": False, "message": "AI service temporarily unavailable."}
+
+
 @app.post("/upload")
 async def upload(file: UploadFile = File(...)):
     """Receive a PDF, extract + embed its text, and return a session_id."""
