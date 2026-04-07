@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
 
 // In production (Vercel), set VITE_API_URL to the Railway backend URL.
 // In dev, leave it unset — Vite's proxy forwards /upload and /ask to localhost:8000.
@@ -217,7 +218,7 @@ export default function App() {
             {messages.map((m, i) => (
               <div key={i} className={`msg ${m.role}`}>
                 <span className="msg-role">{m.role === 'user' ? 'You' : 'AI'}</span>
-                <div className="msg-bubble">{m.content}</div>
+                <div className="msg-bubble"><ReactMarkdown>{m.content}</ReactMarkdown></div>
                 {m.role === 'assistant' && m.sources && m.sources.length > 0 && (
                   <div className="msg-sources">
                     <button className="sources-toggle" onClick={() => toggleSources(i)}>
