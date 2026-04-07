@@ -92,8 +92,7 @@ export default function App() {
     if (!doc || !q.trim() || thinking) return
     setError(null)
 
-    const userMsg: Message = { role: 'user', content: q }
-    setMessages(prev => [...prev, userMsg])
+    setMessages(prev => [...prev, { role: 'user', content: q }])
     setQuestion('')
     setThinking(true)
     scrollToBottom()
@@ -108,16 +107,45 @@ export default function App() {
         const err = await res.json().catch(() => ({ detail: 'Request failed.' }))
         throw new Error(err.detail ?? 'Request failed.')
       }
-      const data: { answer: string; sources: string[] } = await res.json()
 
-      setMessages(prev => [
-        ...prev,
-        { role: 'assistant', content: data.answer, sources: data.sources, showSources: false },
-      ])
+      // Add empty assistant message that will be filled progressively
+      setMessages(prev => [...prev, { role: 'assistant', content: '', sources: [], showSources: false }])
+      setThinking(false)
+
+      const reader = res.body!.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''  // keep incomplete last line in buffer
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const event = JSON.parse(line.slice(6))
+
+          if (event.type === 'chunk') {
+            // Append token to the last message
+            setMessages(prev => prev.map((m, i) =>
+              i === prev.length - 1 ? { ...m, content: m.content + event.text } : m
+            ))
+            scrollToBottom()
+          } else if (event.type === 'sources') {
+            // Attach sources to the last message
+            setMessages(prev => prev.map((m, i) =>
+              i === prev.length - 1 ? { ...m, sources: event.sources } : m
+            ))
+          }
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.')
-    } finally {
       setThinking(false)
+    } finally {
       scrollToBottom()
     }
   }

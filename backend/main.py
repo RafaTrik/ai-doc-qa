@@ -1,3 +1,4 @@
+import json
 import os
 import uuid
 from contextlib import asynccontextmanager
@@ -8,6 +9,7 @@ import pdfplumber
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from google import genai
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
@@ -134,7 +136,7 @@ class AskRequest(BaseModel):
 
 @app.post("/ask")
 async def ask(req: AskRequest):
-    """Find the most relevant chunks and send them to Gemini to answer the question."""
+    """Stream the answer token-by-token using Server-Sent Events."""
     session = sessions.get(req.session_id)
     if not session:
         raise HTTPException(404, "Session not found. Please upload the PDF again.")
@@ -160,9 +162,13 @@ Question: {req.question}
 
 Answer:"""
 
-    response = gemini_client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+    def generate():
+        # Send source chunks first so the frontend can display them immediately
+        yield f"data: {json.dumps({'type': 'sources', 'sources': context_chunks})}\n\n"
+        # Stream answer tokens as they arrive from Gemini
+        for chunk in gemini_client.models.generate_content_stream(model=GEMINI_MODEL, contents=prompt):
+            if chunk.text:
+                yield f"data: {json.dumps({'type': 'chunk', 'text': chunk.text})}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
-    return {
-        "answer": response.text.strip(),
-        "sources": context_chunks,
-    }
+    return StreamingResponse(generate(), media_type="text/event-stream")
